@@ -100,6 +100,7 @@ import           Ouroboros.Network.TxSubmission.Inbound
 import qualified Ouroboros.Network.Diffusion as ND
 import qualified Cardano.Node.STM as STM
 import qualified Control.Concurrent.STM as STM
+import qualified Ouroboros.Network.AnchoredSeq as AS
 
 {- HLINT ignore "Redundant bracket" -}
 {- HLINT ignore "Use record patterns" -}
@@ -387,6 +388,14 @@ ignoringSeverity :: Tracer IO a -> Tracer IO (WithSeverity a)
 ignoringSeverity tr = Tracer $ \(WithSeverity _ ev) -> traceWith tr ev
 {-# INLINE ignoringSeverity #-}
 
+countMyBlocks
+  :: forall blk. HasHeader (Header blk)
+  => AF.AnchoredFragment (Header blk)
+  -> Word64
+countMyBlocks = fromIntegral . length . AS.filter isMine
+  where isMine :: Header blk -> Bool
+        isMine _ = True
+
 traceChainMetrics
   :: forall blk. HasHeader (Header blk)
   => Trace IO Text
@@ -401,8 +410,8 @@ traceChainMetrics tr = do
     chainTipInformation :: ChainDB.TraceEvent blk -> Maybe ChainInformation
     chainTipInformation = \case
       ChainDB.TraceAddBlockEvent ev -> case ev of
-        ChainDB.SwitchedToAFork _warnings newTipInfo _ chain ->
-          Just $ chainInformation newTipInfo chain 0 0
+        ChainDB.SwitchedToAFork _warnings newTipInfo oldChain newChain ->
+          Just $ chainInformation newTipInfo newChain (countMyBlocks newChain) (countMyBlocks oldChain)
         ChainDB.AddedToCurrentChain _warnings newTipInfo _ chain ->
           Just $ chainInformation newTipInfo chain 0 0
         _ -> Nothing
