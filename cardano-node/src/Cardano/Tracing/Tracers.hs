@@ -396,33 +396,34 @@ countMyBlocks = fromIntegral . length . AS.filter isMine
   where isMine :: Header blk -> Bool
         isMine _ = True
 
+subtractPositive :: Word64 -> Word64 -> Word64
+subtractPositive a b = if a > b then a - b else 0
+
 traceChainMetrics
   :: forall blk. HasHeader (Header blk)
   => Trace IO Text
   -> IO (Tracer IO (ChainDB.TraceEvent blk))
 traceChainMetrics tr = do
-  tSwitchingBlocksGained <- STM.newTVarIO 0
   tSwitchingBlocksLost <- STM.newTVarIO 0
   return . Tracer $ \ev ->
     fromMaybe (pure ()) $
-      doTrace tSwitchingBlocksGained tSwitchingBlocksLost <$> chainTipInformation ev
+      doTrace tSwitchingBlocksLost <$> chainTipInformation ev
   where
     chainTipInformation :: ChainDB.TraceEvent blk -> Maybe ChainInformation
     chainTipInformation = \case
       ChainDB.TraceAddBlockEvent ev -> case ev of
         ChainDB.SwitchedToAFork _warnings newTipInfo oldChain newChain ->
-          Just $ chainInformation newTipInfo newChain (countMyBlocks newChain) (countMyBlocks oldChain)
+          Just $ chainInformation newTipInfo newChain (subtractPositive (countMyBlocks oldChain) (countMyBlocks newChain))
         ChainDB.AddedToCurrentChain _warnings newTipInfo _ chain ->
-          Just $ chainInformation newTipInfo chain 0 0
+          Just $ chainInformation newTipInfo chain 0
         _ -> Nothing
       _ -> Nothing
 
 
-    doTrace :: STM.TVar Word64 -> STM.TVar Word64 -> ChainInformation -> IO ()
+    doTrace :: STM.TVar Word64 -> ChainInformation -> IO ()
     doTrace
-        tSwitchingBlocksGained
         tSwitchingBlocksLost
-        ChainInformation { slots, blocks, density, epoch, slotInEpoch, blocksGained, blocksLost } = do
+        ChainInformation { slots, blocks, density, epoch, slotInEpoch, blocksLost } = do
       -- TODO this is executed each time the newFhain changes. How cheap is it?
       meta <- mkLOMeta Critical Public
 
@@ -431,11 +432,7 @@ traceChainMetrics tr = do
       traceI tr meta "blockNum"    blocks
       traceI tr meta "slotInEpoch" slotInEpoch
       traceI tr meta "epoch"       (unEpochNo epoch)
-      when (blocksGained > 0) $ traceI tr meta "blocksGained" blocksGained
-      when (blocksLost   > 0) $ traceI tr meta "blocksLost"   blocksLost
-
-      traceI tr meta "switchingBlocksGained" =<< STM.modifyReadTVarIO tSwitchingBlocksGained (+ blocksGained)
-      traceI tr meta "switchingBlocksLost"   =<< STM.modifyReadTVarIO tSwitchingBlocksLost   (+ blocksLost  )
+      when (blocksLost   > 0) $ traceI tr meta "switchingBlocksLost" =<< STM.modifyReadTVarIO tSwitchingBlocksLost (+ blocksLost)
 
 traceD :: Trace IO a -> LOMeta -> Text -> Double -> IO ()
 traceD tr meta msg d = traceNamedObject tr (meta, LogValue msg (PureD d))
@@ -988,8 +985,6 @@ data ChainInformation = ChainInformation
   , slotInEpoch :: Word64
     -- ^ Relative slot number of the tip of the current chain within the
     -- epoch.
-  , blocksGained :: Word64
-    -- ^ Blocks gained due to switch at fork
   , blocksLost :: Word64
     -- ^ Blocks lost due to switch at fork
   }
@@ -999,15 +994,13 @@ chainInformation
   => ChainDB.NewTipInfo blk
   -> AF.AnchoredFragment (Header blk)
   -> Word64
-  -> Word64
   -> ChainInformation
-chainInformation newTipInfo frag blocksGained blocksLost = ChainInformation
+chainInformation newTipInfo frag blocksLost = ChainInformation
     { slots         = unSlotNo $ fromWithOrigin 0 (AF.headSlot frag)
     , blocks        = unBlockNo $ fromWithOrigin (BlockNo 1) (AF.headBlockNo frag)
     , density       = fragmentChainDensity frag
     , epoch         = ChainDB.newTipEpoch newTipInfo
     , slotInEpoch   = ChainDB.newTipSlotInEpoch newTipInfo
-    , blocksGained  = blocksGained
     , blocksLost    = blocksLost
     }
 
