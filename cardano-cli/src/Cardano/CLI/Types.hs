@@ -5,17 +5,27 @@
 module Cardano.CLI.Types
   ( CBORObject (..)
   , CertificateFile (..)
+  , Datum (..)
+  , ExecutionUnits(..)
   , GenesisFile (..)
+  , PlutusScriptBundle(..)
+  , NonNativeScriptFile(..)
+  , PlutusScriptType(..)
   , OutputFormat (..)
+  , PlutusTag (..)
+  , ProtocolParamsFile( ..)
   , QueryFilter (..)
+  , Redeemer (..)
   , SigningKeyFile (..)
   , SigningKeyOrScriptFile (..)
   , SocketPath (..)
   , ScriptFile (..)
+  , TxInAnyEra (..)
   , TxOutAnyEra (..)
   , UpdateProposalFile (..)
   , VerificationKeyFile (..)
   ) where
+
 
 import           Cardano.Prelude
 
@@ -90,3 +100,58 @@ data SigningKeyOrScriptFile = ScriptFileForWitness FilePath
 --
 data TxOutAnyEra = TxOutAnyEra AddressAny Value
   deriving (Eq, Show)
+
+data TxInAnyEra = TxInAnyEra TxId TxIx PlutusTag
+  deriving Show
+
+newtype ProtocolParamsFile = ProtocolParamsFile FilePath
+  deriving (Show, Eq)
+
+data PlutusTag = IsPlutusFee | IsNotPlutusFee
+  deriving Show
+
+-- Optional Datum when spending from a
+-- Plutus script locked UTxO
+newtype Datum = Datum { unDatum :: FilePath } deriving Show
+
+newtype Redeemer = Redeemer { unRedeemer :: FilePath } deriving Show
+
+data PlutusScriptBundle
+  = PlutusScriptBundle
+      FilePath
+      -- ^ Filepath of Plutus script
+      PlutusScriptType
+      -- ^ What the Plutus script will do
+      ExecutionUnits
+      -- ^ Arbitrary execution unit in which we measure the cost of scripts.
+      [TxInAnyEra]
+      -- ^ Script fees
+      ProtocolParamsFile
+      [Redeemer]
+      (Maybe Datum)
+  deriving Show
+
+-- | The different types of Plutus scripts
+--and what they do.
+data PlutusScriptType
+  = Spending Text
+    -- ^ Validates spending a script-locked UTxO
+  | Minting Text
+    -- ^ Validates minting new tokens
+  | Rewarding Text
+    -- ^ Validates certificate transactions
+  | Certifying FilePath
+    -- ^ Validates withdrawl from a reward account
+  deriving Show
+
+
+newtype NonNativeScriptFile = NonNativeScriptFile { unNonNativeScriptFile :: FilePath }
+
+-- | Arbitrary execution unit in which we measure the cost of scripts.
+data ExecutionUnits = ExecutionUnits
+                        -- ^ Memory
+                        Word64
+                        -- ^ Steps
+                        Word64
+                      deriving Show
+

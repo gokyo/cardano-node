@@ -30,7 +30,6 @@ module Cardano.CLI.Shelley.Commands
   , SomeKeyFile (..)
   , OpCertCounterFile (..)
   , OutputFile (..)
-  , ProtocolParamsFile (..)
   , ProtocolParamsSourceSpec (..)
   , WitnessFile (..)
   , TxBodyFile (..)
@@ -161,7 +160,7 @@ renderKeyCmd cmd =
 data TransactionCmd
   = TxBuildRaw
       AnyCardanoEra
-      [TxIn]
+      [TxInAnyEra]
       [TxOutAnyEra]
       (Maybe Value)
       -- ^ Multi-Asset value
@@ -176,6 +175,7 @@ data TransactionCmd
       TxMetadataJsonSchema
       [ScriptFile]
       -- ^ Auxillary scripts
+      [PlutusScriptBundle]
       [MetadataFile]
       (Maybe UpdateProposalFile)
       TxBodyFile
@@ -357,10 +357,6 @@ renderGenesisCmd cmd =
 --
 -- Shelley CLI flag/option data types
 --
-
-newtype ProtocolParamsFile
-  = ProtocolParamsFile FilePath
-  deriving (Show, Eq)
 
 newtype TxInCount
   = TxInCount Int
