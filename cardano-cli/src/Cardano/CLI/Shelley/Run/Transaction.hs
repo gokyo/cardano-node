@@ -166,6 +166,7 @@ renderEra (AnyCardanoEra ByronEra)   = "Byron"
 renderEra (AnyCardanoEra ShelleyEra) = "Shelley"
 renderEra (AnyCardanoEra AllegraEra) = "Allegra"
 renderEra (AnyCardanoEra MaryEra)    = "Mary"
+renderEra (AnyCardanoEra AlonzoEra)  = "Alonzo"
 
 renderMode :: AnyConsensusMode -> Text
 renderMode (AnyConsensusMode ByronMode) = "ByronMode"
@@ -193,7 +194,7 @@ runTransactionCmd cmd =
   case cmd of
     TxBuildRaw era txins txouts mValue mLowBound mUpperBound
                fee certs wdrls metadataSchema scriptFiles
-               metadataFiles mUpProp out ->
+               _nonNativeScripts metadataFiles mUpProp out ->
       runTxBuildRaw era txins txouts mLowBound mUpperBound
                     fee mValue certs wdrls metadataSchema
                     scriptFiles metadataFiles mUpProp out
@@ -220,7 +221,7 @@ runTransactionCmd cmd =
 
 runTxBuildRaw
   :: AnyCardanoEra
-  -> [TxIn]
+  -> [TxInAnyEra]
   -> [TxOutAnyEra]
   -> Maybe SlotNo
   -- ^ Tx lower bound
@@ -296,10 +297,20 @@ txFeatureMismatch :: CardanoEra era
 txFeatureMismatch era feature =
     left (ShelleyTxCmdTxFeatureMismatch (anyCardanoEra era) feature)
 
-validateTxIns :: CardanoEra era
-              -> [TxIn]
-              -> ExceptT ShelleyTxCmdError IO [TxIn]
-validateTxIns _ = return -- no validation or era-checking needed
+validateTxIns :: forall era.
+                 CardanoEra era
+              -> [TxInAnyEra]
+              -> ExceptT ShelleyTxCmdError IO [TxIn era]
+validateTxIns era = mapM toTxIn
+  where
+    toTxIn :: TxInAnyEra -> ExceptT ShelleyTxCmdError IO (TxIn era)
+    toTxIn (TxInAnyEra txId xId tag) =
+      case plutusFeesSupportedInEra era of
+        Left _plutusNotSupported -> panic "Plutus not supported"
+        Right plutusInAlonzo ->
+          case tag of
+            IsPlutusFee -> return . TxIn txId xId $ PlutusInput plutusInAlonzo
+            IsNotPlutusFee -> return $ TxIn txId xId NotPlutusInput
 
 validateTxOuts :: forall era.
                   CardanoEra era
@@ -309,8 +320,9 @@ validateTxOuts era = mapM toTxOutInAnyEra
   where
     toTxOutInAnyEra :: TxOutAnyEra
                     -> ExceptT ShelleyTxCmdError IO (TxOut era)
-    toTxOutInAnyEra (TxOutAnyEra addr val) = TxOut <$> toAddressInAnyEra addr
-                                                   <*> toTxOutValueInAnyEra val
+    toTxOutInAnyEra (TxOutAnyEra addr val) =
+      TxOut <$> toAddressInAnyEra addr
+            <*> toTxOutValueInAnyEra val
 
     toAddressInAnyEra :: AddressAny -> ExceptT ShelleyTxCmdError IO (AddressInEra era)
     toAddressInAnyEra addrAny =
@@ -404,6 +416,14 @@ validateTxAuxScripts era files =
              validateScriptSupportedInEra era script
         | ScriptFile file <- files ]
       return (TxAuxScripts AuxScriptsInMaryEra scripts)
+    Just AuxScriptsInAlonzoEra -> do
+      scripts <- sequence
+        [ do script <- firstExceptT ShelleyTxCmdReadJsonFileError $
+                         readFileScriptInAnyLang file
+             validateScriptSupportedInEra era script
+        | ScriptFile file <- files ]
+      return (TxAuxScripts AuxScriptsInAlonzoEra scripts)
+
 
 validateTxWithdrawals :: CardanoEra era
                       -> [(StakeAddress, Lovelace)]

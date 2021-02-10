@@ -158,6 +158,8 @@ module Cardano.Api (
     -- ** Transaction inputs
     TxIn(TxIn),
     TxIx(TxIx),
+    TxInTypeInEra(..),
+    plutusFeesSupportedInEra,
 
     -- ** Transaction outputs
     TxOut(TxOut),

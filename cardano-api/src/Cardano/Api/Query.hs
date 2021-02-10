@@ -163,7 +163,7 @@ deriving instance Show (QueryInShelleyBasedEra era result)
 newtype ByronUpdateState = ByronUpdateState Byron.Update.State
   deriving Show
 
-newtype UTxO era = UTxO (Map TxIn (TxOut era))
+newtype UTxO era = UTxO (Map (TxIn era) (TxOut era))
 
 instance IsCardanoEra era => ToJSON (UTxO era) where
   toJSON (UTxO m) = toJSON m
@@ -222,6 +222,9 @@ fromUTxO eraConversion utxo =
     ShelleyBasedEraMary ->
       let Shelley.UTxO sUtxo = utxo
       in UTxO . Map.fromList . map (bimap fromShelleyTxIn (fromTxOut ShelleyBasedEraMary)) $ Map.toList sUtxo
+    ShelleyBasedEraAlonzo ->
+      let Shelley.UTxO sUtxo = utxo
+      in UTxO . Map.fromList . map (bimap fromShelleyTxIn (fromTxOut ShelleyBasedEraAlonzo)) $ Map.toList sUtxo
 
 fromShelleyPoolDistr :: Shelley.PoolDistr StandardCrypto
                      -> Map (Hash StakePoolKey) Rational
