@@ -476,6 +476,8 @@ pTransaction =
         (Opt.info pTransactionCalculateMinFee $ Opt.progDesc "Calculate the minimum fee for a transaction")
     , subParser "txid"
         (Opt.info pTransactionId $ Opt.progDesc "Print a transaction identifier")
+    , subParser "view" $
+        Opt.info pTransactionView $ Opt.progDesc "Print a transaction"
     ]
  where
   assembleInfo :: ParserInfo TransactionCmd
@@ -551,9 +553,10 @@ pTransaction =
     ParamsFromFile <$> pProtocolParamsFile
 
   pTransactionId  :: Parser TransactionCmd
-  pTransactionId = TxGetTxId <$> (Left  <$> pTxBodyFile Input
-                              <|> Right <$> pTxFile Input)
+  pTransactionId = TxGetTxId <$> pAnyTxFile
 
+  pTransactionView :: Parser TransactionCmd
+  pTransactionView = TxView <$> pAnyTxFile
 
 pNodeCmd :: Parser NodeCmd
 pNodeCmd =
@@ -1688,6 +1691,9 @@ pTxFile fdir =
         Input -> "tx-file"
         Output -> "out-file"
 
+pAnyTxFile :: Parser (Either TxBodyFile TxFile)
+pAnyTxFile = Left <$> pTxBodyFile Input <|> Right <$> pTxFile Input
+
 pTxInCount :: Parser TxInCount
 pTxInCount =
   TxInCount <$>
@@ -2453,4 +2459,3 @@ readerFromParsecParser p =
 subParser :: String -> ParserInfo a -> Parser a
 subParser availableCommand pInfo =
   Opt.hsubparser $ Opt.command availableCommand pInfo <> Opt.metavar availableCommand
-

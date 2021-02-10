@@ -205,14 +205,13 @@ runTransactionCmd cmd =
                       nShelleyKeyWitnesses nByronKeyWitnesses ->
       runTxCalculateMinFee txbody mnw pGenesisOrParamsFile nInputs nOutputs
                            nShelleyKeyWitnesses nByronKeyWitnesses
-    TxGetTxId txinfile ->
-      runTxGetTxId txinfile
+    TxGetTxId txinfile -> runTxGetTxId txinfile
+    TxView    txinfile -> runTxView    txinfile
     TxMintedPolicyId sFile -> runTxCreatePolicyId sFile
     TxCreateWitness txBodyfile witSignData mbNw outFile ->
       runTxCreateWitness txBodyfile witSignData mbNw outFile
     TxAssembleTxBodyWitness txBodyFile witnessFile outFile ->
       runTxSignWitness txBodyFile witnessFile outFile
-
 
 -- ----------------------------------------------------------------------------
 -- Building transactions
@@ -783,6 +782,16 @@ runTxGetTxId txfile = do
           return (InAnyCardanoEra era (getTxBody tx))
 
     liftIO $ BS.putStrLn $ serialiseToRawBytesHex (getTxId txbody)
+
+runTxView :: Either TxBodyFile TxFile -> ExceptT ShelleyTxCmdError IO ()
+runTxView txfile = do
+  InAnyCardanoEra era txbody <-
+    case txfile of
+      Left (TxBodyFile txbodyFile) -> readFileTxBody txbodyFile
+      Right (TxFile txFile) -> do
+        InAnyCardanoEra era tx <- readFileTx txFile
+        return (InAnyCardanoEra era (getTxBody tx))
+  liftIO $ print (era, txbody)
 
 runTxCreateWitness
   :: TxBodyFile

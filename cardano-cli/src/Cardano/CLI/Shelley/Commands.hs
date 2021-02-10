@@ -193,6 +193,7 @@ data TransactionCmd
       TxShelleyWitnessCount
       TxByronWitnessCount
   | TxGetTxId (Either TxBodyFile TxFile)
+  | TxView    (Either TxBodyFile TxFile)
   deriving Show
 
 data ProtocolParamsSourceSpec
@@ -217,6 +218,7 @@ renderTransactionCmd cmd =
     TxMintedPolicyId {} -> "transaction policyid"
     TxCalculateMinFee {} -> "transaction calculate-min-fee"
     TxGetTxId {} -> "transaction txid"
+    TxView {} -> "transaction view"
 
 data NodeCmd
   = NodeKeyGenCold VerificationKeyFile SigningKeyFile OpCertCounterFile
