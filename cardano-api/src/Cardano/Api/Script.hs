@@ -183,15 +183,14 @@ instance TestEquality SimpleScriptVersion where
     testEquality _              _              = Nothing
 
 
-data PlutusScriptVersion lang
-  -- For now, there are no such versions, but it'd be like this:
-  -- PlutusScriptV1 :: PlutusScriptVersion PlutusScriptV1
+data PlutusScriptVersion lang where
+    PlutusScriptV1 :: PlutusScriptVersion PlutusScriptV1
 
 deriving instance (Eq   (PlutusScriptVersion lang))
 deriving instance (Show (PlutusScriptVersion lang))
 
 instance TestEquality PlutusScriptVersion where
-    testEquality lang = case lang of {}
+    testEquality PlutusScriptV1 PlutusScriptV1 = Just Refl
 
 
 data AnyScriptLanguage where
@@ -208,15 +207,16 @@ instance Eq AnyScriptLanguage where
 instance Enum AnyScriptLanguage where
     toEnum 0 = AnyScriptLanguage (SimpleScriptLanguage SimpleScriptV1)
     toEnum 1 = AnyScriptLanguage (SimpleScriptLanguage SimpleScriptV2)
+    toEnum 2 = AnyScriptLanguage (PlutusScriptLanguage PlutusScriptV1)
     toEnum _ = error "AnyScriptLanguage.toEnum: bad argument"
 
     fromEnum (AnyScriptLanguage (SimpleScriptLanguage SimpleScriptV1)) = 0
     fromEnum (AnyScriptLanguage (SimpleScriptLanguage SimpleScriptV2)) = 1
-    fromEnum (AnyScriptLanguage (PlutusScriptLanguage lang)) = case lang of {}
+    fromEnum (AnyScriptLanguage (PlutusScriptLanguage PlutusScriptV1)) = 3
 
 instance Bounded AnyScriptLanguage where
     minBound = AnyScriptLanguage (SimpleScriptLanguage SimpleScriptV1)
-    maxBound = AnyScriptLanguage (SimpleScriptLanguage SimpleScriptV2)
+    maxBound = AnyScriptLanguage (PlutusScriptLanguage PlutusScriptV1)
 
 
 class HasTypeProxy lang => IsScriptLanguage lang where
@@ -228,8 +228,8 @@ instance IsScriptLanguage SimpleScriptV1 where
 instance IsScriptLanguage SimpleScriptV2 where
     scriptLanguage = SimpleScriptLanguage SimpleScriptV2
 
---instance IsScriptLanguage PlutusScriptV1 where
---    scriptLanguage = PlutusScriptLanguage PlutusScriptV1
+instance IsScriptLanguage PlutusScriptV1 where
+    scriptLanguage = PlutusScriptLanguage PlutusScriptV1
 
 
 class IsScriptLanguage lang => IsSimpleScriptLanguage lang where
@@ -283,6 +283,9 @@ instance IsScriptLanguage lang => SerialiseAsCBOR (Script lang) where
     serialiseToCBOR (SimpleScript SimpleScriptV2 s) =
       CBOR.serialize' (toAllegraTimelock s :: Timelock.Timelock StandardCrypto)
 
+    serialiseToCBOR (PlutusScript PlutusScriptV1 ()) =
+      error "Covert API Plutus script to underlying type"
+
     deserialiseFromCBOR _ bs =
       case scriptLanguage :: ScriptLanguage lang of
         SimpleScriptLanguage SimpleScriptV1 ->
@@ -296,8 +299,8 @@ instance IsScriptLanguage lang => SerialiseAsCBOR (Script lang) where
                                 :: Timelock.Timelock StandardCrypto
                                 -> SimpleScript SimpleScriptV2)
           <$> CBOR.decodeAnnotator "Script" fromCBOR (LBS.fromStrict bs)
-
-        PlutusScriptLanguage v -> case v of {}
+        PlutusScriptLanguage PlutusScriptV1 ->
+           error "Plutus Decoder: TODO"
 
 
 instance IsScriptLanguage lang => HasTextEnvelope (Script lang) where
@@ -305,7 +308,7 @@ instance IsScriptLanguage lang => HasTextEnvelope (Script lang) where
       case scriptLanguage :: ScriptLanguage lang of
         SimpleScriptLanguage SimpleScriptV1 -> "SimpleScriptV1"
         SimpleScriptLanguage SimpleScriptV2 -> "SimpleScriptV2"
-        PlutusScriptLanguage v -> case v of {}
+        PlutusScriptLanguage PlutusScriptV1 -> "PlutusScriptV1"
 
 
 -- ----------------------------------------------------------------------------
@@ -343,6 +346,8 @@ instance Eq ScriptInAnyLang where
 toScriptInAnyLang :: Script lang -> ScriptInAnyLang
 toScriptInAnyLang s@(SimpleScript v _) =
     ScriptInAnyLang (SimpleScriptLanguage v) s
+toScriptInAnyLang s@(PlutusScript v _) =
+    ScriptInAnyLang (PlutusScriptLanguage v) s
 
 instance HasTypeProxy ScriptInAnyLang where
     data AsType ScriptInAnyLang = AsScriptInAnyLang
@@ -367,7 +372,9 @@ instance SerialiseAsCBOR ScriptInAnyLang where
        <> CBOR.encodeWord 1
        <> toCBOR (toAllegraTimelock s :: Timelock.Timelock StandardCrypto)
 
-    serialiseToCBOR (ScriptInAnyLang (PlutusScriptLanguage v) _) = case v of {}
+    serialiseToCBOR (ScriptInAnyLang (PlutusScriptLanguage PlutusScriptV1)
+                                      (PlutusScript _v _s)) =
+      error "serialiseToCBOR ScriptAnyLang: PlutusScript"
 
     deserialiseFromCBOR AsScriptInAnyLang bs =
         CBOR.decodeAnnotator "Script" decodeScript (LBS.fromStrict bs)
@@ -391,6 +398,8 @@ instance SerialiseAsCBOR ScriptInAnyLang where
                 convert = ScriptInAnyLang (SimpleScriptLanguage SimpleScriptV2)
                         . SimpleScript SimpleScriptV2
                         . fromAllegraTimelock TimeLocksInSimpleScriptV2
+
+            2 -> error "deserialiseFromCBOR PlutusScript"
 
             _ -> CBOR.cborError $ CBOR.DecoderErrorUnknownTag "Script" tag
 
@@ -424,9 +433,12 @@ data ScriptLanguageInEra lang era where
      SimpleScriptV1InShelley :: ScriptLanguageInEra SimpleScriptV1 ShelleyEra
      SimpleScriptV1InAllegra :: ScriptLanguageInEra SimpleScriptV1 AllegraEra
      SimpleScriptV1InMary    :: ScriptLanguageInEra SimpleScriptV1 MaryEra
+     SimpleScriptV1InAlonzo  :: ScriptLanguageInEra SimpleScriptV1 AlonzoEra
 
      SimpleScriptV2InAllegra :: ScriptLanguageInEra SimpleScriptV2 AllegraEra
      SimpleScriptV2InMary    :: ScriptLanguageInEra SimpleScriptV2 MaryEra
+     SimpleScriptV2InAlonzo  :: ScriptLanguageInEra SimpleScriptV2 AlonzoEra
+     PlutusScriptV1InAlonzo  :: ScriptLanguageInEra PlutusScriptV1 AlonzoEra
 
 deriving instance Eq   (ScriptLanguageInEra lang era)
 deriving instance Show (ScriptLanguageInEra lang era)
@@ -481,6 +493,12 @@ scriptLanguageSupportedInEra era lang =
       (MaryEra, SimpleScriptLanguage SimpleScriptV2) ->
         Just SimpleScriptV2InMary
 
+      (AlonzoEra, SimpleScriptLanguage SimpleScriptV2) ->
+        Just SimpleScriptV2InAlonzo
+
+      (AlonzoEra, PlutusScriptLanguage PlutusScriptV1) ->
+        Just PlutusScriptV1InAlonzo
+
       _ -> Nothing
 
 languageOfScriptLanguageInEra :: ScriptLanguageInEra lang era
@@ -490,9 +508,13 @@ languageOfScriptLanguageInEra langInEra =
       SimpleScriptV1InShelley -> SimpleScriptLanguage SimpleScriptV1
       SimpleScriptV1InAllegra -> SimpleScriptLanguage SimpleScriptV1
       SimpleScriptV1InMary    -> SimpleScriptLanguage SimpleScriptV1
+      SimpleScriptV1InAlonzo  -> SimpleScriptLanguage SimpleScriptV1
 
       SimpleScriptV2InAllegra -> SimpleScriptLanguage SimpleScriptV2
       SimpleScriptV2InMary    -> SimpleScriptLanguage SimpleScriptV2
+      SimpleScriptV2InAlonzo  -> SimpleScriptLanguage SimpleScriptV2
+
+      PlutusScriptV1InAlonzo  -> PlutusScriptLanguage PlutusScriptV1
 
 eraOfScriptLanguageInEra :: ScriptLanguageInEra lang era
                          -> ShelleyBasedEra era
@@ -505,6 +527,10 @@ eraOfScriptLanguageInEra langInEra =
 
       SimpleScriptV1InMary    -> ShelleyBasedEraMary
       SimpleScriptV2InMary    -> ShelleyBasedEraMary
+
+      SimpleScriptV1InAlonzo  -> ShelleyBasedEraAlonzo
+      SimpleScriptV2InAlonzo  -> ShelleyBasedEraAlonzo
+      PlutusScriptV1InAlonzo  -> ShelleyBasedEraAlonzo
 
 
 -- | Given a target era and a script in some language, check if the language is
@@ -562,6 +588,7 @@ hashScript (SimpleScript SimpleScriptV2 s) =
                        -> Timelock.Timelock StandardCrypto)
   $ s
 
+hashScript (PlutusScript PlutusScriptV1 _s) = error "hashScript: PlutusScript"
 
 toShelleyScriptHash :: ScriptHash -> Shelley.ScriptHash StandardCrypto
 toShelleyScriptHash (ScriptHash h) =  h
@@ -645,14 +672,22 @@ adjustSimpleScriptVersion target = go
 --
 
 toShelleyScript :: ScriptInEra era -> Ledger.Script (ShelleyLedgerEra era)
-toShelleyScript (ScriptInEra langInEra (SimpleScript _ script)) =
+toShelleyScript (ScriptInEra langInEra (SimpleScript SimpleScriptV1 script)) =
     case langInEra of
       SimpleScriptV1InShelley -> toShelleyMultiSig script
-
       SimpleScriptV1InAllegra -> toAllegraTimelock script
       SimpleScriptV1InMary    -> toAllegraTimelock script
+      SimpleScriptV1InAlonzo  -> toAllegraTimelock script
+
+toShelleyScript (ScriptInEra langInEra (SimpleScript SimpleScriptV2 script)) =
+    case langInEra of
       SimpleScriptV2InAllegra -> toAllegraTimelock script
       SimpleScriptV2InMary    -> toAllegraTimelock script
+      SimpleScriptV2InAlonzo  -> toAllegraTimelock script
+
+toShelleyScript (ScriptInEra langInEra (PlutusScript PlutusScriptV1 _script)) =
+    case langInEra of
+      PlutusScriptV1InAlonzo  -> error "toShelleyScript: PlutusScript"
 
 
 -- | Conversion for the 'Shelley.MultiSig' language used by the Shelley era.
@@ -719,6 +754,7 @@ fromAllegraTimelock timelocks = go
 
 instance ToJSON (Script lang) where
   toJSON (SimpleScript _ script) = toJSON script
+  toJSON (PlutusScript _ _script) = error "ToJSON PlutusScript"
 
 instance ToJSON ScriptInAnyLang where
   toJSON (ScriptInAnyLang _ script) = toJSON script
@@ -755,8 +791,8 @@ instance IsScriptLanguage lang => FromJSON (Script lang) where
     case scriptLanguage :: ScriptLanguage lang of
       SimpleScriptLanguage lang -> SimpleScript lang <$>
                                      parseSimpleScript lang v
-      PlutusScriptLanguage lang -> case lang of {}
-
+      PlutusScriptLanguage lang -> PlutusScript lang
+                                     <$> error "FromJSON: PlutusScript"
 
 instance FromJSON ScriptInAnyLang where
   parseJSON v =
@@ -807,7 +843,15 @@ instance IsCardanoEra era => FromJSON (ScriptInEra era) where
                                      (SimpleScript SimpleScriptV2 s)
               Just s' -> ScriptInEra SimpleScriptV1InMary
                                      (SimpleScript SimpleScriptV1 s')
-      AlonzoEra -> error "todo"
+      AlonzoEra -> toMinimumSimpleScriptVersion
+                     <$> parseSimpleScript SimpleScriptV2 v
+        where
+          toMinimumSimpleScriptVersion s =
+            case adjustSimpleScriptVersion SimpleScriptV1 s of
+              Nothing -> ScriptInEra SimpleScriptV2InAlonzo
+                                     (SimpleScript SimpleScriptV2 s)
+              Just s' -> ScriptInEra SimpleScriptV1InAlonzo
+                                     (SimpleScript SimpleScriptV1 s')
 
 
 

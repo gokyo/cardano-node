@@ -306,7 +306,7 @@ validateTxIns era = mapM toTxIn
     toTxIn :: TxInAnyEra -> ExceptT ShelleyTxCmdError IO (TxIn era)
     toTxIn (TxInAnyEra txId xId tag) =
       case plutusFeesSupportedInEra era of
-        Left _plutusNotSupported -> panic "Plutus not supported"
+        Left _plutusNotSupported -> return $ TxIn txId xId NotPlutusInput
         Right plutusInAlonzo ->
           case tag of
             IsPlutusFee -> return . TxIn txId xId $ PlutusInput plutusInAlonzo
